@@ -1,0 +1,722 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Culture Everywhere — POC (HTML + p5.js)</title>
+  <style>
+    :root { --bg:#0b0c10; --panel:#12141b; --ink:#e9ecf1; --muted:#9aa3af; --line:#222838; --accent:#9ae6b4; }
+    html, body { margin:0; padding:0; background:var(--bg); color:var(--ink); font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+    .wrap { max-width:1200px; margin:0 auto; padding:16px; }
+    h1 { font-size:18px; margin:0 0 10px; letter-spacing:0.2px; }
+    .grid { display:grid; grid-template-columns: 420px 1fr; gap:12px; }
+    .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px; }
+    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    label { font-size:12px; color:var(--muted); }
+    input[type="file"] { width:100%; }
+    input[type="text"] { width:100%; background:#0f1117; color:var(--ink); border:1px solid var(--line); border-radius:10px; padding:10px; outline:none; }
+    button { background:#0f1117; color:var(--ink); border:1px solid var(--line); border-radius:10px; padding:10px 12px; cursor:pointer; }
+    button:hover { border-color:#3a4663; }
+    button.primary { border-color:#2d5b44; box-shadow: 0 0 0 1px rgba(154,230,180,0.15) inset; }
+    .small { font-size:12px; color:var(--muted); line-height:1.35; }
+    .pill { display:inline-block; padding:4px 8px; border:1px solid var(--line); border-radius:999px; font-size:12px; color:var(--muted); }
+    .status { min-height:18px; font-size:12px; color:var(--muted); }
+    .two { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+    .preview { width:100%; border-radius:10px; border:1px solid var(--line); background:#0f1117; overflow:hidden; }
+    .preview img { width:100%; display:block; }
+    .results { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:10px; }
+    .item { border:1px solid var(--line); border-radius:12px; overflow:hidden; background:#0f1117; display:flex; flex-direction:column; }
+    .item img { width:100%; height:180px; object-fit:cover; background:#0a0b0f; }
+    .item .meta { padding:10px; display:flex; flex-direction:column; gap:6px; }
+    .item .t { font-size:13px; line-height:1.2; }
+    .item .m { font-size:12px; color:var(--muted); }
+    .item a { color:var(--accent); text-decoration:none; font-size:12px; }
+    .interp { white-space:pre-wrap; font-size:13px; line-height:1.45; color:#d6d9e0; }
+    .canvasWrap { border-radius:12px; border:1px solid var(--line); overflow:hidden; background:#0a0b0f; }
+    .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size:12px; color:#cbd5e1; }
+    @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } .results { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 560px) { .results { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Culture Everywhere — Proof of Concept (Upload → Signals → Museum API → Visual Network)</h1>
+
+    <div class="grid">
+      <div class="card">
+        <div class="row" style="justify-content:space-between;">
+          <span class="pill">Single-file POC</span>
+          <span class="pill">Met API</span>
+          <span class="pill">p5.js</span>
+        </div>
+
+        <div style="height:10px"></div>
+
+        <label>1) Upload an image (object/building/animal/anything)</label>
+        <input id="fileInput" type="file" accept="image/*" />
+
+        <div style="height:10px"></div>
+
+        <div class="two">
+          <div>
+            <label>2) Optional: your best label (helps search)</label>
+            <input id="manualLabel" type="text" placeholder="e.g., 'french bulldog', 'art deco facade', 'crow', 'vase'" />
+          </div>
+          <div>
+            <label>3) Optional: search override keywords</label>
+            <input id="searchOverride" type="text" placeholder="comma-separated: dog, bulldog, paris, poster..." />
+          </div>
+        </div>
+
+        <div style="height:10px"></div>
+
+        <div class="row">
+          <button id="analyzeBtn" class="primary">Analyze + Search The Met</button>
+          <button id="clearBtn">Clear</button>
+        </div>
+
+        <div style="height:10px"></div>
+        <div id="status" class="status"></div>
+
+        <div style="height:10px"></div>
+        <div class="small">
+          What this POC demonstrates:
+          <ul>
+            <li><span class="kbd">Upload → signal extraction</span> (dominant colors + basic edge density)</li>
+            <li><span class="kbd">Recognition proxy</span> (manual label + heuristic tags)</li>
+            <li><span class="kbd">Museum API</span> (Met open Collection API search + object fetch)</li>
+            <li><span class="kbd">Interpretation layer</span> (template text you can later replace with an LLM call)</li>
+            <li><span class="kbd">Distributed interpretation</span> (connect “what you see” to museum knowledge anywhere)</li>
+          </ul>
+        </div>
+
+        <div style="height:10px"></div>
+        <div class="preview">
+          <img id="imgPreview" alt="" style="display:none;" />
+        </div>
+      </div>
+
+      <div class="card">
+        <label>Visual network (p5.js)</label>
+        <div style="height:10px"></div>
+        <div class="canvasWrap" id="p5Mount"></div>
+
+        <div style="height:12px"></div>
+
+        <label>Interpretation (template text)</label>
+        <div style="height:8px"></div>
+        <div id="interpretation" class="interp">(Upload an image and click Analyze.)</div>
+
+        <div style="height:12px"></div>
+
+        <label>Results (The Met)</label>
+        <div style="height:8px"></div>
+        <div id="results" class="results"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- p5.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.3/lib/p5.min.js"></script>
+
+  <script>
+    // =========================
+    // Culture Everywhere — POC
+    // Single-file HTML + p5.js
+    // - Upload image
+    // - Extract lightweight signals (dominant colors + edge density)
+    // - Build tags (manual label + heuristic)
+    // - Search The Met Collection API (open, no key)
+    // - Fetch object details + thumbnails
+    // - Render node network in p5: "your object" node connected to museum object nodes
+    // =========================
+
+    const fileInput = document.getElementById('fileInput');
+    const imgPreview = document.getElementById('imgPreview');
+    const manualLabel = document.getElementById('manualLabel');
+    const searchOverride = document.getElementById('searchOverride');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const statusEl = document.getElementById('status');
+    const resultsEl = document.getElementById('results');
+    const interpretationEl = document.getElementById('interpretation');
+
+    let uploadedImageBitmap = null;
+    let uploadedImageURL = null;
+
+    // Data passed into p5 sketch:
+    const state = {
+      hasImage: false,
+      imgW: 0,
+      imgH: 0,
+      dominant: [],    // [{r,g,b,hex}, ...]
+      edgeDensity: 0,  // 0..1
+      tags: [],
+      metObjects: [],  // [{objectID,title,artistDisplayName,objectDate,primaryImageSmall,objectURL}, ...]
+    };
+
+    function setStatus(msg) {
+      statusEl.textContent = msg || '';
+    }
+
+    function resetUI() {
+      setStatus('');
+      resultsEl.innerHTML = '';
+      interpretationEl.textContent = '(Upload an image and click Analyze.)';
+      imgPreview.style.display = 'none';
+      imgPreview.src = '';
+      if (uploadedImageURL) URL.revokeObjectURL(uploadedImageURL);
+      uploadedImageURL = null;
+      uploadedImageBitmap = null;
+
+      state.hasImage = false;
+      state.imgW = 0;
+      state.imgH = 0;
+      state.dominant = [];
+      state.edgeDensity = 0;
+      state.tags = [];
+      state.metObjects = [];
+
+      // notify p5
+      window.__CE_POC__ = window.__CE_POC__ || {};
+      window.__CE_POC__.state = state;
+      window.__CE_POC__.bump = (window.__CE_POC__.bump || 0) + 1;
+    }
+
+    clearBtn.addEventListener('click', () => {
+      fileInput.value = '';
+      manualLabel.value = '';
+      searchOverride.value = '';
+      resetUI();
+    });
+
+    fileInput.addEventListener('change', async (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f) return;
+
+      resetUI();
+
+      uploadedImageURL = URL.createObjectURL(f);
+      imgPreview.src = uploadedImageURL;
+      imgPreview.style.display = 'block';
+
+      setStatus('Loading image…');
+
+      uploadedImageBitmap = await createImageBitmap(f);
+      state.hasImage = true;
+      state.imgW = uploadedImageBitmap.width;
+      state.imgH = uploadedImageBitmap.height;
+
+      window.__CE_POC__ = window.__CE_POC__ || {};
+      window.__CE_POC__.state = state;
+      window.__CE_POC__.bitmap = uploadedImageBitmap;
+      window.__CE_POC__.bump = (window.__CE_POC__.bump || 0) + 1;
+
+      setStatus(`Image loaded: ${state.imgW}×${state.imgH}`);
+    });
+
+    analyzeBtn.addEventListener('click', async () => {
+      if (!uploadedImageBitmap) {
+        setStatus('Upload an image first.');
+        return;
+      }
+      try {
+        analyzeBtn.disabled = true;
+        setStatus('Extracting signals…');
+
+        const { dominant, edgeDensity } = await extractSignals(uploadedImageBitmap);
+        state.dominant = dominant;
+        state.edgeDensity = edgeDensity;
+
+        const tags = buildTags({
+          manual: manualLabel.value.trim(),
+          override: searchOverride.value.trim(),
+          dominant,
+          edgeDensity,
+        });
+        state.tags = tags;
+
+        // Update p5
+        window.__CE_POC__.state = state;
+        window.__CE_POC__.bump = (window.__CE_POC__.bump || 0) + 1;
+
+        setStatus(`Signals extracted. Tags: ${tags.join(', ')}`);
+
+        setStatus('Searching The Met…');
+        const metObjects = await searchMet(tags);
+        state.metObjects = metObjects;
+
+        renderResults(metObjects);
+        renderInterpretation(tags, dominant, edgeDensity, metObjects);
+
+        // Update p5 with objects
+        window.__CE_POC__.state = state;
+        window.__CE_POC__.bump = (window.__CE_POC__.bump || 0) + 1;
+
+        setStatus(`Done. Found ${metObjects.length} related objects.`);
+      } catch (err) {
+        console.error(err);
+        setStatus('Error. See console.');
+      } finally {
+        analyzeBtn.disabled = false;
+      }
+    });
+
+    // -------------------------
+    // SIGNAL EXTRACTION (no ML)
+    // -------------------------
+    async function extractSignals(bitmap) {
+      // Downsample onto a small canvas for speed
+      const targetW = 160;
+      const scale = targetW / bitmap.width;
+      const targetH = Math.max(1, Math.round(bitmap.height * scale));
+
+      const c = document.createElement('canvas');
+      c.width = targetW;
+      c.height = targetH;
+      const ctx = c.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(bitmap, 0, 0, targetW, targetH);
+
+      const imgData = ctx.getImageData(0, 0, targetW, targetH);
+      const data = imgData.data;
+
+      // Dominant colors via simple quantization (RGB bins)
+      const bins = new Map(); // key -> {count, r,g,b}
+      const step = 8; // quantization step (0..255)
+      for (let i = 0; i < data.length; i += 4) {
+        const a = data[i + 3];
+        if (a < 20) continue;
+        const r = data[i] & ~(step - 1);
+        const g = data[i + 1] & ~(step - 1);
+        const b = data[i + 2] & ~(step - 1);
+        const key = (r << 16) | (g << 8) | b;
+        const prev = bins.get(key);
+        if (prev) prev.count++;
+        else bins.set(key, { count: 1, r, g, b });
+      }
+      const sorted = Array.from(bins.values()).sort((a, b) => b.count - a.count).slice(0, 5);
+      const dominant = sorted.map(c => ({
+        r: c.r, g: c.g, b: c.b,
+        hex: '#' + [c.r, c.g, c.b].map(v => v.toString(16).padStart(2, '0')).join('')
+      }));
+
+      // Edge density via very rough Sobel-like gradient on luminance
+      // (enough to differentiate "flat poster" vs "busy facade/foliage")
+      let edgeHits = 0;
+      let samples = 0;
+      const W = targetW, H = targetH;
+
+      function lumAt(x, y) {
+        const idx = (y * W + x) * 4;
+        return 0.2126 * data[idx] + 0.7152 * data[idx + 1] + 0.0722 * data[idx + 2];
+      }
+
+      for (let y = 1; y < H - 1; y++) {
+        for (let x = 1; x < W - 1; x++) {
+          const gx =
+            -1 * lumAt(x - 1, y - 1) + 1 * lumAt(x + 1, y - 1) +
+            -2 * lumAt(x - 1, y)     + 2 * lumAt(x + 1, y) +
+            -1 * lumAt(x - 1, y + 1) + 1 * lumAt(x + 1, y + 1);
+          const gy =
+            -1 * lumAt(x - 1, y - 1) + -2 * lumAt(x, y - 1) + -1 * lumAt(x + 1, y - 1) +
+             1 * lumAt(x - 1, y + 1) +  2 * lumAt(x, y + 1) +  1 * lumAt(x + 1, y + 1);
+          const mag = Math.sqrt(gx * gx + gy * gy);
+          samples++;
+          if (mag > 60) edgeHits++;
+        }
+      }
+      const edgeDensity = samples ? edgeHits / samples : 0;
+
+      return { dominant, edgeDensity };
+    }
+
+    // -------------------------
+    // TAG BUILDING
+    // -------------------------
+    function buildTags({ manual, override, dominant, edgeDensity }) {
+      const tags = [];
+
+      // manual label is most valuable
+      if (manual) {
+        tags.push(...manual.split(',').map(s => s.trim()).filter(Boolean));
+      }
+
+      // override keywords
+      if (override) {
+        tags.push(...override.split(',').map(s => s.trim()).filter(Boolean));
+      }
+
+      // heuristic tags from signals (kept conservative)
+      if (!manual && !override) {
+        // If no label, use generic cultural tags that still produce results
+        tags.push('art', 'object');
+      }
+
+      // Add a texture hint
+      if (edgeDensity > 0.14) tags.push('architecture', 'pattern');
+      else if (edgeDensity < 0.06) tags.push('poster', 'print');
+
+      // Add color names from top 2 dominant colors (very rough)
+      const top2 = dominant.slice(0, 2);
+      for (const c of top2) {
+        const name = roughColorName(c.r, c.g, c.b);
+        if (name) tags.push(name);
+      }
+
+      // Deduplicate while preserving order
+      const seen = new Set();
+      const out = [];
+      for (const t of tags) {
+        const key = t.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(t);
+      }
+      return out.slice(0, 8); // keep small for search
+    }
+
+    function roughColorName(r, g, b) {
+      // Simple buckets; only a hint for search terms, not a claim of "recognition"
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      const d = max - min;
+      if (max < 40) return 'black';
+      if (min > 210) return 'white';
+      if (d < 18) return 'gray';
+      if (max === r && g > b) return 'orange';
+      if (max === r && b >= g) return 'red';
+      if (max === g) return 'green';
+      if (max === b) return 'blue';
+      return '';
+    }
+
+    // -------------------------
+    // THE MET API SEARCH
+    // -------------------------
+    async function searchMet(tags) {
+      // Met search endpoint:
+      // https://collectionapi.metmuseum.org/public/collection/v1/search?q=sunflower
+      // then fetch object details: /objects/{id}
+      const q = encodeURIComponent(tags.join(' '));
+      const searchURL = `https://collectionapi.metmuseum.org/public/collection/v1/search?hasImages=true&q=${q}`;
+
+      const sres = await fetch(searchURL);
+      if (!sres.ok) throw new Error('Met search failed');
+      const sjson = await sres.json();
+
+      const ids = (sjson && sjson.objectIDs) ? sjson.objectIDs.slice(0, 12) : [];
+      if (ids.length === 0) return [];
+
+      // Fetch details with small concurrency
+      const out = [];
+      const concurrency = 4;
+      let idx = 0;
+
+      async function worker() {
+        while (idx < ids.length) {
+          const myIdx = idx++;
+          const id = ids[myIdx];
+          try {
+            const o = await fetch(`https://collectionapi.metmuseum.org/public/collection/v1/objects/${id}`);
+            if (!o.ok) continue;
+            const obj = await o.json();
+            if (!obj || !obj.primaryImageSmall) continue;
+            out.push({
+              objectID: obj.objectID,
+              title: obj.title || '(untitled)',
+              artistDisplayName: obj.artistDisplayName || '',
+              objectDate: obj.objectDate || '',
+              department: obj.department || '',
+              primaryImageSmall: obj.primaryImageSmall,
+              objectURL: obj.objectURL || ''
+            });
+          } catch (_) {}
+        }
+      }
+
+      const workers = Array.from({ length: concurrency }, () => worker());
+      await Promise.all(workers);
+
+      return out.slice(0, 9);
+    }
+
+    function renderResults(items) {
+      resultsEl.innerHTML = '';
+      if (!items.length) {
+        resultsEl.innerHTML = `<div class="small">No results returned. Try a clearer manual label or simpler keywords.</div>`;
+        return;
+      }
+
+      for (const it of items) {
+        const el = document.createElement('div');
+        el.className = 'item';
+
+        const img = document.createElement('img');
+        img.src = it.primaryImageSmall;
+        img.alt = it.title;
+
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+
+        const t = document.createElement('div');
+        t.className = 't';
+        t.textContent = it.title;
+
+        const m = document.createElement('div');
+        m.className = 'm';
+        const artist = it.artistDisplayName ? ` — ${it.artistDisplayName}` : '';
+        const date = it.objectDate ? ` (${it.objectDate})` : '';
+        m.textContent = `${it.department || 'The Met'}${artist}${date}`;
+
+        const a = document.createElement('a');
+        a.href = it.objectURL || '#';
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = it.objectURL ? 'Open on The Met' : '';
+
+        meta.appendChild(t);
+        meta.appendChild(m);
+        if (it.objectURL) meta.appendChild(a);
+
+        el.appendChild(img);
+        el.appendChild(meta);
+        resultsEl.appendChild(el);
+      }
+    }
+
+    function renderInterpretation(tags, dominant, edgeDensity, objects) {
+      const label = manualLabel.value.trim() || '(unlabeled object)';
+      const colors = dominant.slice(0, 3).map(c => c.hex).join(', ') || '(n/a)';
+      const textureHint =
+        edgeDensity > 0.14 ? 'high detail / patterned (architecture, foliage, dense texture)'
+        : edgeDensity < 0.06 ? 'low detail / graphic (poster, print, flat surfaces)'
+        : 'moderate detail (mixed texture)';
+
+      const examples = objects.slice(0, 3).map(o => `• ${o.title}${o.artistDisplayName ? ' — ' + o.artistDisplayName : ''}${o.objectDate ? ' (' + o.objectDate + ')' : ''}`).join('\n');
+
+      const text =
+`What you pointed at: ${label}
+
+Extracted signals (POC):
+• Dominant colors: ${colors}
+• Texture hint: ${textureHint}
+
+System behavior (Culture Everywhere):
+• The uploaded image becomes a “cultural encounter.”
+• Tags are formed (manual label + lightweight heuristics).
+• The encounter is connected to museum knowledge through an open museum API (The Met).
+• Results are returned as culturally-adjacent objects that can become interpretive “nodes.”
+
+Met connections (sample):
+${examples || '• (no objects returned)'}
+
+Next step (if you want this to become “real recognition + real interpretation”):
+• Replace the tag builder with computer-vision labels (e.g., Vision API).
+• Replace this template text with an LLM interpretation call that connects:
+  (a) the recognized thing → (b) museum objects → (c) context and meaning.
+`;
+
+      interpretationEl.textContent = text;
+    }
+
+    // -------------------------
+    // p5.js VISUAL NETWORK
+    // -------------------------
+    // We mount p5 into #p5Mount and read from window.__CE_POC__.state
+    window.__CE_POC__ = window.__CE_POC__ || { state };
+
+    const sketch = (p) => {
+      let lastBump = -1;
+      let img = null;
+      let nodes = [];
+      let center = { x: 0, y: 0 };
+      let w = 0, h = 0;
+
+      function rebuild() {
+        const st = window.__CE_POC__.state;
+
+        // Basic layout
+        nodes = [];
+        const cx = w * 0.33;
+        const cy = h * 0.5;
+        center = { x: cx, y: cy };
+
+        // center node = uploaded object
+        nodes.push({
+          kind: 'source',
+          x: cx,
+          y: cy,
+          r: Math.min(w, h) * 0.06,
+          phase: p.random(1000),
+          label: st.tags && st.tags[0] ? st.tags[0] : 'encounter',
+        });
+
+        // museum nodes to the right
+        const ms = (st.metObjects || []).slice(0, 9);
+        const cols = 3;
+        const gapX = (w * 0.58) / cols;
+        const gapY = (h * 0.70) / 3;
+
+        for (let i = 0; i < ms.length; i++) {
+          const c = i % cols;
+          const r = Math.floor(i / cols);
+          const x = w * 0.50 + c * gapX + gapX * 0.10;
+          const y = h * 0.18 + r * gapY + gapY * 0.10;
+
+          nodes.push({
+            kind: 'met',
+            x, y,
+            r: Math.min(w, h) * 0.035,
+            phase: p.random(1000),
+            title: ms[i].title || 'object',
+            thumb: ms[i].primaryImageSmall || '',
+          });
+        }
+      }
+
+      p.setup = () => {
+        const mount = document.getElementById('p5Mount');
+        w = mount.clientWidth;
+        h = 420;
+        const cnv = p.createCanvas(w, h);
+        cnv.parent(mount);
+        p.pixelDensity(2);
+        p.noStroke();
+        rebuild();
+      };
+
+      p.windowResized = () => {
+        const mount = document.getElementById('p5Mount');
+        w = mount.clientWidth;
+        p.resizeCanvas(w, h);
+        rebuild();
+      };
+
+      p.draw = () => {
+        const st = window.__CE_POC__.state;
+        if ((window.__CE_POC__.bump || 0) !== lastBump) {
+          lastBump = (window.__CE_POC__.bump || 0);
+
+          // Load image into p5 (from bitmap) if present
+          img = null;
+          if (window.__CE_POC__.bitmap) {
+            // Convert bitmap to canvas then to p5 image (simple + reliable)
+            const b = window.__CE_POC__.bitmap;
+            const c = document.createElement('canvas');
+            c.width = b.width;
+            c.height = b.height;
+            const ctx = c.getContext('2d');
+            ctx.drawImage(b, 0, 0);
+            img = p.loadImage(c.toDataURL('image/png'));
+          }
+          rebuild();
+        }
+
+        // Background
+        p.background(10, 11, 15);
+
+        // Subtle gradient wash from dominant colors
+        if (st.dominant && st.dominant.length) {
+          const c0 = st.dominant[0];
+          const c1 = st.dominant[1] || st.dominant[0];
+          for (let y = 0; y < h; y += 3) {
+            const t = y / h;
+            const rr = p.lerp(c0.r, c1.r, t);
+            const gg = p.lerp(c0.g, c1.g, t);
+            const bb = p.lerp(c0.b, c1.b, t);
+            p.fill(rr, gg, bb, 18);
+            p.rect(0, y, w, 3);
+          }
+        }
+
+        // Draw uploaded image as a framed tile near source node
+        if (img) {
+          const tileW = w * 0.26;
+          const tileH = h * 0.38;
+          const tx = w * 0.05;
+          const ty = h * 0.31;
+
+          p.push();
+          p.fill(255, 18);
+          p.rect(tx - 6, ty - 6, tileW + 12, tileH + 12, 10);
+
+          p.fill(0, 70);
+          p.rect(tx, ty, tileW, tileH, 10);
+
+          // fit image
+          const ar = img.width / img.height;
+          let dw = tileW, dh = tileH;
+          if (ar > tileW / tileH) {
+            dh = tileW / ar;
+          } else {
+            dw = tileH * ar;
+          }
+          const ix = tx + (tileW - dw) * 0.5;
+          const iy = ty + (tileH - dh) * 0.5;
+          p.image(img, ix, iy, dw, dh);
+
+          p.pop();
+        }
+
+        // Connections
+        const src = nodes.find(n => n.kind === 'source');
+        if (src) {
+          for (const n of nodes) {
+            if (n.kind !== 'met') continue;
+            const pulse = 0.5 + 0.5 * Math.sin((p.millis() * 0.002) + n.phase);
+            const a = 60 + pulse * 90;
+            p.stroke(180, 200, 255, a);
+            p.strokeWeight(1.2);
+            p.line(src.x, src.y, n.x, n.y);
+          }
+          p.noStroke();
+        }
+
+        // Nodes
+        for (const n of nodes) {
+          const pulse = 0.5 + 0.5 * Math.sin((p.millis() * 0.002) + n.phase);
+          const rr = n.r * (0.9 + 0.25 * pulse);
+
+          if (n.kind === 'source') {
+            // source node
+            p.fill(154, 230, 180, 220);
+            p.circle(n.x, n.y, rr * 2.2);
+
+            p.fill(255, 22);
+            p.circle(n.x, n.y, rr * 3.2);
+
+            p.fill(230);
+            p.textSize(12);
+            p.textAlign(p.LEFT, p.CENTER);
+            p.text('Encounter', n.x - 18, n.y - rr * 2.0);
+            p.fill(200);
+            p.textSize(11);
+            p.text(st.tags && st.tags.length ? st.tags.join(', ') : '(no tags)', n.x - 18, n.y - rr * 1.3);
+          } else {
+            // museum node
+            p.fill(210, 220, 255, 180);
+            p.circle(n.x, n.y, rr * 2.0);
+            p.fill(255, 18);
+            p.circle(n.x, n.y, rr * 3.0);
+
+            // short label
+            const title = (n.title || '').slice(0, 26) + ((n.title || '').length > 26 ? '…' : '');
+            p.fill(215);
+            p.textSize(10);
+            p.textAlign(p.LEFT, p.CENTER);
+            p.text(title, n.x + rr * 1.2, n.y);
+          }
+        }
+
+        // Footer hint
+        p.fill(160);
+        p.textSize(11);
+        p.textAlign(p.LEFT, p.BOTTOM);
+        const ed = (st.edgeDensity || 0);
+        p.text(`Signals: edgeDensity=${ed.toFixed(3)} | nodes=${Math.max(0, (st.metObjects||[]).length)}`, 12, h - 10);
+      };
+    };
+
+    new p5(sketch);
+  </script>
+</body>
+</html>
