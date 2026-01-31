@@ -1,1 +1,1 @@
-- museumplanning.github.io/culture-everywhere
+- https://museumplanning.github.io/culture-everywhere/
